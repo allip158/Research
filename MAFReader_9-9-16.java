@@ -2,12 +2,6 @@
  * MAFReader - pipeline stage that reads MAF data into a spark Dataset
  */
 
-/* 
- * TODO: clean up this class... needs some private functions
- * TODO: get rid of label map and merge two Datasets
- * TODO: fix logic in readMAF(), patients need not be in order in CSV to merge mutation lists
- */
-
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
