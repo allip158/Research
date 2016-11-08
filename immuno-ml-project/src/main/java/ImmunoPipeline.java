@@ -2,9 +2,7 @@
  * ImmunoPipeline - main class for running the machine learning pipeline
  */
 
-/* TODO: cross validation
- * TODO: config file will likely contain specifications of pipeline 
- * i.e. model type, features, cross-validation (number folds), evaluation schema, ... 
+/* TODO: Print settings in output file
  */
 
 import java.util.ArrayList;
@@ -33,6 +31,9 @@ import org.apache.spark.mllib.classification.SVMModel;
 import org.apache.spark.mllib.classification.SVMWithSGD;
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
 import org.apache.spark.ml.feature.Normalizer;
+import org.apache.spark.ml.feature.PCA;
+import org.apache.spark.ml.feature.PCAModel;
+import org.apache.spark.ml.linalg.DenseVector;
 import org.apache.spark.ml.linalg.SparseVector;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -58,7 +59,7 @@ public class ImmunoPipeline implements Serializable {
 	private Double split = 0.7;
 	private Integer numIterationsSVM = 100;
 	private Integer numRuns = 5;
-	private Boolean writeResults = false;
+	private Boolean writeResults = true;
 	private MAFReader mafr;
 	
 	
@@ -79,62 +80,42 @@ public class ImmunoPipeline implements Serializable {
 		/* Generate feature vectors from neoepitopes */
 		CountVectorizerModel featureModel = new CountVectorizer()
 				.setInputCol("clusters")
-				.setOutputCol("features")
+				.setOutputCol("counts")
 				.fit(data);
 		
-		Dataset<Row> dataWithFeatures = featureModel.transform(data).select(col("label"), col("features"));
+		Dataset<Row> dataWithFeatures = featureModel.transform(data).select(col("label"), col("counts"));
 		dataWithFeatures.show(5);
 		
 		/* Normalize each Vector using $L^1$ norm. */
-		Normalizer normalizer = new Normalizer()
-		  .setInputCol("features")
-		  .setOutputCol("normFeatures")
-		  .setP(1.0);
+//		Normalizer normalizer = new Normalizer()
+//		  .setInputCol("counts")
+//		  .setOutputCol("normFeatures")
+//		  .setP(1.0);
+//		
+//		Dataset<Row> l1NormData = normalizer.transform(dataWithFeatures);
+//		l1NormData = l1NormData.select(col("label"), col("normFeatures"));
+//		l1NormData.show(5);
+//		
+		PCAModel pca = new PCA()
+				  .setInputCol("counts")
+				  .setOutputCol("features")
+				  .setK(500)
+				  .fit(dataWithFeatures);
 		
-		Dataset<Row> l1NormData = normalizer.transform(dataWithFeatures);
-		l1NormData.show(5);
+		Dataset<Row> result = pca.transform(dataWithFeatures);
 		
-		trainAndTest(l1NormData);
+		Dataset<Row> processedData = result.select(col("label"), col("features"));
+
+		processedData.show(5);
+		
+		trainAndTest(processedData);
 		
 		if (this.writeResults) {
 			writeResults();
 		} else {
 			printResults();
 		}
-
 	}
-	
-	/* Function to find most informative features */
-	public void findInformativeFeatures() {
-		System.err.println("finding informative features yah");	
-		Dataset<Patient> data = readData();
-		List<String> allPossibleClusters = PatientUtils.getAllClusters(data);
-		
-		int i = 0;
-		for (String cluster: allPossibleClusters) {
-			System.err.println("Testing cluster: " + cluster);
-			data = mafr.updateTargets(cluster);
-			data.show(5);
-			
-			/* Generate feature vectors from neoepitopes */
-			CountVectorizerModel featureModel = new CountVectorizer()
-					.setInputCol("targets")
-					.setOutputCol("features")
-					.fit(data);
-			
-			Dataset<Row> dataWithFeatures = featureModel.transform(data).select(col("label"), col("features"));
-			dataWithFeatures.show(5);
-			
-			trainAndTest(dataWithFeatures);
-			
-			i++;
-			if (i > 5) {
-				break;
-			}
-		}
-		
-		writeResults();
- 	}
 
 	private Dataset<Patient> readData() {
 		
@@ -159,7 +140,7 @@ public class ImmunoPipeline implements Serializable {
 	}
 	
 	private void trainAndTest(Dataset<Row> dataWithFeatures) {
-		JavaRDD<LabeledPoint> rddData = dataWithFeatures.toJavaRDD().map(new MakeLabeledPointRDD()); 
+		JavaRDD<LabeledPoint> rddData = dataWithFeatures.toJavaRDD().map(new MakeLabeledPointDenseRDD()); 
 		
 		JavaRDD<Tuple2<Object, Object>> scoreAndLabels;
 		
@@ -218,11 +199,15 @@ public class ImmunoPipeline implements Serializable {
 		}
 		
 	}
-
+	
+	/*
+	 * train - takes a random sample of data and trains a SVM 
+	 * WARN: column names must be "label" and "features"
+	 */
 	private JavaRDD<Tuple2<Object, Object>> train(JavaRDD<LabeledPoint> rddData) {
 
 		JavaRDD<LabeledPoint> training = rddData.sample(false, this.split);
-		training.cache();
+//		training.cache();
 		JavaRDD<LabeledPoint> test = rddData.subtract(training);
 		
 		final SVMModel model = SVMWithSGD.train(training.rdd(), this.numIterationsSVM);
@@ -272,6 +257,22 @@ public class ImmunoPipeline implements Serializable {
 		public LabeledPoint call(Row r) throws Exception {
 		    SparseVector sparseFeatures = r.getAs(1); //keywords in RDD
 		    Vector features = sparseFeatures.compressed();
+		    Double label = r.getDouble(0); //id in RDD
+		    LabeledPoint lp = new LabeledPoint(label, Vectors.fromML(features));
+		    return lp;
+		}		
+	}
+	
+	public static class MakeLabeledPointDenseRDD implements Function<Row, LabeledPoint> {
+
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 1L;
+
+		public LabeledPoint call(Row r) throws Exception {
+		    DenseVector denseFeatures = r.getAs(1); //keywords in RDD
+		    Vector features = denseFeatures.compressed();
 		    Double label = r.getDouble(0); //id in RDD
 		    LabeledPoint lp = new LabeledPoint(label, Vectors.fromML(features));
 		    return lp;

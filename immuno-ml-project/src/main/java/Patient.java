@@ -24,7 +24,6 @@ public class Patient implements Serializable{
 	private List<String> wtepitopes;
 	private List<String> clusters;
 	private Double label;
-	private List<String> targets;
 	
 	public Patient() {
 		mutations = new ArrayList<String>();
@@ -43,7 +42,6 @@ public class Patient implements Serializable{
 		duplicate.setId(id);
 		duplicate.setNeoantigens(neoantigens);
 		duplicate.setNeoepitopes(neoepitopes);
-		duplicate.setTargets(targets);
 		duplicate.setWtantigens(wtantigens);
 		duplicate.setWtepitopes(wtepitopes);
 		duplicate.setLabel(label);
@@ -142,14 +140,6 @@ public class Patient implements Serializable{
 	
 	public void setLabel(Double label) {
 		this.label = label;
-	}
-	
-	public List<String> getTargets() {
-		return targets;
-	}
-	
-	public void setTargets(List<String> targets) {
-		this.targets = targets;
 	}
 	
 }
