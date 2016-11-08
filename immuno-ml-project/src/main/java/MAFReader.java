@@ -29,7 +29,7 @@ public class MAFReader implements Serializable {
 	Boolean header = true;
 	Integer neoepitopeLength = 4;
 	Integer neoantigenLength = 9;
-	Boolean balance = true;
+	Boolean balance = false;
 	
 	private HashMap<String, Patient> patientMap;
 	private String PHYSICOCHEMICAL = "pc";
@@ -118,11 +118,15 @@ public class MAFReader implements Serializable {
 		for (Patient patient: this.patientMap.values()) {
 			label = patient.getLabel();
 			patid = patient.getId();
-			if (label == 1.0 && !patid.contains("_2")) {
+			if (label == 1.0 && !patid.contains("_2") && !patid.contains("_3")) {
 				Patient newPatient = patient.copy();
+				Patient newPatient2 = patient.copy();
 				String newId = newPatient.getId() + "_2";
+				String newId2 = newPatient.getId() + "_3";
 				newPatient.setId(newId);
+				newPatient2.setId(newId2);
 				newPatients.add(newPatient);
+				newPatients.add(newPatient2);
 			}
 		}
 		
@@ -132,26 +136,6 @@ public class MAFReader implements Serializable {
 		
 		System.err.println("After balancing: " + patientMap.keySet().size());
 
-	}
-
-	/*
-	 * updateTargets - changes to sparse vector of single cluster counts
-	 */
-	public Dataset<Patient> updateTargets(String targetCluster) {
-		List<Patient> patients = new ArrayList<Patient>(patientMap.values());
-		List<String> targets;
-		
-		for (Patient patient: patients) {
-			targets = PatientUtils.getClusters(patient, targetCluster);
-			patient.setTargets(targets);
-		}
-		
-		Encoder<Patient> patientEncoder = Encoders.bean(Patient.class);
-		Dataset<Patient> data = spark.createDataset(
-				patients,
-				patientEncoder
-				);
-		return data;
 	}
 
 	
